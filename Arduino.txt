@@ -1,0 +1,117 @@
+// Definisi konstanta
+#define R1 3
+#define R2 2
+#define LDR1 A0
+#define LDR2 A1
+#define NUM_PAIR 2
+
+#define PRINT_INTERVAL 10000
+
+// Deklarasi variabel
+int lamp[NUM_PAIR] = {R1,R2};
+bool lamp_on[NUM_PAIR] = {true, true};
+int ldr_thres[NUM_PAIR] = {631,708};
+int ldr[NUM_PAIR] = {LDR1, LDR2};
+int ldr_val[NUM_PAIR]={0,0};
+
+bool lamp_auto[NUM_PAIR] = {true, true};
+
+long last_time = millis();
+bool print_now = true;
+
+void setup(){
+  // Atur pin kontrol relay
+  pinMode(lamp[0],OUTPUT);
+  pinMode(lamp[1],OUTPUT);
+
+  // Buka komunikasi serial dengan baud rate 9600
+  Serial.begin(9600);
+}
+
+void loop(){
+  if(millis() - last_time >= PRINT_INTERVAL ){
+    print_now = true;
+  }
+  // iterasi semua lampu dan sensor.
+  for(int i = 0; i < NUM_PAIR; ++i){
+    // cek pengaturan auto
+    if(lamp_auto[i]){
+      // jika auto
+      // baca sensor LDR
+      ldr_val[i] = analogRead(ldr[i]);
+
+// dihapus kalau menggangu raspberry pi
+      if(print_now){
+        Serial.print (i+1);
+        Serial.print (" ");
+        Serial.println ( ldr_val[i]);
+      }
+      // Cek threshold
+      if(ldr_val[i] > ldr_thres[i]) {
+        // Nyalakan lampu jika nilai bacaan sensor di atas threshold (gelap)
+        digitalWrite(lamp[i], LOW);
+        lamp_on[i] = true;
+      }
+      else {
+        // Matikan lampu jika nilai bacaan sensor di bawah threshold (terang)
+        digitalWrite(lamp[i], HIGH);
+        lamp_on[i] = false;
+      }
+    } else {
+      // jika manual
+      // jika lampu diatur menyala
+      if(lamp_on[i]){
+        // nyalakan lampu
+        digitalWrite(lamp[i], LOW);
+      }
+      // Jika tidak
+      else {
+        // Matikan Lampu
+        digitalWrite(lamp[i], HIGH);
+      }
+    }
+  }
+  if(print_now){
+    print_now = false;
+    last_time = millis();
+  }
+}
+
+void serialEvent(){
+  // Jika ada perintah dari raspberry
+  if(Serial.available()){
+    // Baca karakter pertama
+    char ch = Serial.read();
+    // Pilah perintah berdasarkan karakter pertama
+    if(ch == 'a'){
+      // set auto
+      // delay untuk menunggu serial siap
+      delay(50);
+      // target index (lampu 1 atau 2)
+      char target_index = Serial.read() - '0';
+      if(target_index >=0 && target_index < NUM_PAIR){
+        // aktifkan auto lampu
+        lamp_auto[target_index] = Serial.read() - '0';
+        // Kirim kode berhasil!
+        Serial.write(0x01);
+      } else {
+        // Kirim kode gagal
+        Serial.write(0x00);
+      }
+    } else if (ch == 's'){
+      // set lampu nyala/mati
+      delay(50);
+      // target index (lampu1 atau 2)
+      int target_index = Serial.read() - '0';
+      if(target_index >=0 && target_index < NUM_PAIR && lamp_auto[target_index] != true){
+        // nyalakan lampu
+        lamp_on[target_index] = Serial.read() - '0';
+        // Kirim kode sukses!
+        Serial.write(0x01);
+      } else {
+        // Kirim kode gagal
+        Serial.write(0x00);
+      }
+    }
+  }
+}

@@ -1,0 +1,66 @@
+from db_helper import *
+import firebase_admin
+from firebase_admin import credentials, messaging
+
+import json
+import serial
+
+ser = serial.Serial('/dev/ttyUSB0', 9600)
+topic = ""
+
+def parse_request( fr, json ):
+    action = json['action']
+    print(json)
+    data = {'index' : json['index'], 'data' : json['data']}
+    msg  = {'action' : json['action'], 'index' : json['index'], 'data' : json['data']}
+    if action == 'auth' :
+        msg['status'] = auth( data )
+    elif action == 'set_auto' :
+        msg['status'] = set_auto( data )
+    elif action == 'lampu' :
+        msg['status'] = lampu( data )
+
+    message = messaging.Message(
+        data = msg,
+        token = fr
+    )
+
+    response = messaging.send(message)
+
+def auth( data ):
+    data = json.loads(data['data'])
+    if data['username'] == 'user' and data['password'] == 'user':
+        return 'true'
+    else:
+        return 'false'
+
+def register():
+    conn = create_connection('smarthome.db')
+    num_rows = insert(conn, 'user', hashpassword('user'))
+    conn.close()
+
+def set_auto( data ):
+    ser.write('a'.encode())
+    ser.write(data['index'].encode())
+    ser.write(data['data'].encode())
+    ser.flushInput()
+    retval = ser.read(1)
+    if ord(retval) == 1:
+        return 'true'
+    else:
+        return 'false'
+
+def lampu( data ):
+    ser.write('s'.encode())
+    ser.write(data['index'].encode())
+    ser.write(data['data'].encode())
+    ser.flushInput()
+    retval = ser.read(1)
+    if ord(retval) == 1:
+        return 'true'
+    else:
+        return 'false'
+
+def hashpassword(password):
+    import hashlib
+    return hashlib.md5(password.encode()).hexdigest()

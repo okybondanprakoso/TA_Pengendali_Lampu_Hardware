@@ -1,0 +1,60 @@
+import logging
+from xmppgcm import GCM, XMPPEvent
+import xml.etree.ElementTree as ET
+import html
+import json
+import firebase_admin
+from firebase_admin import credentials, messaging
+from functions import *
+
+cred = credentials.Certificate("/home/pi/cred.json")
+firebase_admin.initialize_app(cred)
+
+topic = 'test'
+
+def onAcknowledge(error, message):
+    message_id = message.data['message_id']
+    message_from = message.data['from']
+    if error != None:
+        print('Server did not acknowledge message: ID - {0} : from - {1}'.format(message_id, message_from))
+    print('Server acknowledged message: ID - {0} : from - {1}'.format(message_id, message_from))
+
+
+def onDisconnect(draining):
+    print('inside onDisconnect')
+    xmpp.connect(('gcm-preprod.googleapis.com', 5236), use_ssl=True)
+
+
+def onSessionStart(queue_length):
+    print('inside onSessionStart {0}'.format(queue_length))
+    # ns = {"root" : "http://schemas.omicron.at/public/200906/common"}
+    data = {'key1': 'value1'}
+    options = { 'delivery_receipt_requested': True }
+    xmpp.send_gcm('your_device_token', data, options, onAcknowledge)
+
+
+def onReceipt(data):
+    print('inside onReceipt {0}'.format(data))
+
+
+def onMessage(data):
+    print('inside onMessage {0}'.format(data))
+    str_data = '{0}'.format(data)
+    str_data = html.unescape(str_data)
+    tree = ET.fromstring(str_data)
+    rdata = json.loads(tree.text)
+    parse_request(rdata['from'], rdata['data'])
+
+
+# optionally, set up logging
+logging.basicConfig(level=logging.DEBUG, format='%(levelname)-8s %(message)s')
+logging.debug("Starting up")
+
+xmpp = GCM('1033717887699@gcm.googleapis.com', 'AAAA8K5jMtM:APA91bG7tHeODtvP-hTjwe9f_ucd-BkwK1Ib3_MIznvPqb6mMj5jFiDa3dxi16dSpLYNzdzOUB2lOCUsVFKQCr9ntr5HIRDdUHfMrMccdDagsTDA1wh3Gtc4SljGx_9OoBzXosnIUdaq')
+xmpp.add_event_handler(XMPPEvent.CONNECTED, onSessionStart)
+xmpp.add_event_handler(XMPPEvent.DISCONNECTED, onDisconnect)
+xmpp.add_event_handler(XMPPEvent.RECEIPT, onReceipt)
+xmpp.add_event_handler(XMPPEvent.MESSAGE, onMessage)
+xmpp.connect(('fcm-xmpp.googleapis.com', 5236), use_ssl=True) # test environment
+# xmpp.connect(('fcm-xmpp.googleapis.com', 5235), use_ssl=True)  # production environment
+xmpp.process(block=True)
